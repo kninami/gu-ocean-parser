@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 
 from flask import Flask, request
 
@@ -9,6 +11,10 @@ import data_service
 import google_credentials
 
 app = Flask(__name__)
+
+MAX_LOCATION_NAME_LENGTH = 100
+LOCATION_ALLOWED_PUNCTUATION = {" ", "-", "_", ".", "(", ")", "·", ","}
+MONTH_PATTERN = re.compile(r"^\d{4}-\d{2}$")
 
 
 def run_dev_server() -> None:
@@ -36,7 +42,66 @@ def _wants_refresh() -> bool:
     return value in {"1", "true", "yes", "y"}
 
 
+def _normalize_location_name(raw_value: str) -> str:
+    return unicodedata.normalize("NFC", raw_value).strip()
+
+
+def _is_allowed_location_character(char: str) -> bool:
+    return char.isalnum() or char in LOCATION_ALLOWED_PUNCTUATION
+
+
+def _validate_location_name(raw_value: str):
+    location_name = _normalize_location_name(raw_value)
+
+    if not location_name:
+        return None, _json_response(
+            {
+                "message": "Missing required location name.",
+            },
+            status=400,
+        )
+
+    if len(location_name) > MAX_LOCATION_NAME_LENGTH:
+        return None, _json_response(
+            {
+                "message": "Location name is too long.",
+                "max_length": MAX_LOCATION_NAME_LENGTH,
+            },
+            status=400,
+        )
+
+    if any(not _is_allowed_location_character(char) for char in location_name):
+        return None, _json_response(
+            {
+                "message": "Location name contains unsupported characters.",
+            },
+            status=400,
+        )
+
+    return location_name, None
+
+
+def _validate_month(month: str | None):
+    if not month:
+        return None, None
+
+    if not MONTH_PATTERN.fullmatch(month):
+        return None, _json_response(
+            {
+                "message": "Invalid month format. Use YYYY-MM.",
+                "month": month,
+            },
+            status=400,
+        )
+
+    return month, None
+
+
 def _get_location_response(location_name: str):
+    month, month_error = _validate_month((request.args.get("month") or "").strip())
+    if month_error is not None:
+        return month_error
+
     dataset = data_service.get_dataset(force_refresh=_wants_refresh())
     location = dataset.get("locations", {}).get(location_name)
 
@@ -49,7 +114,6 @@ def _get_location_response(location_name: str):
             status=404,
         )
 
-    month = request.args.get("month")
     if not month:
         return _json_response(location)
 
@@ -142,20 +206,21 @@ def list_locations():
 
 @app.get("/location")
 def get_location_by_query():
-    location_name = (request.args.get("name") or "").strip()
-    if not location_name:
-        return _json_response(
-            {
-                "message": "Missing required query parameter: name",
-            },
-            status=400,
-        )
+    location_name, error_response = _validate_location_name(
+        request.args.get("name") or ""
+    )
+    if error_response is not None:
+        return error_response
 
     return _get_location_response(location_name)
 
 
 @app.get("/locations/<path:location_name>")
 def get_location(location_name: str):
+    location_name, error_response = _validate_location_name(location_name)
+    if error_response is not None:
+        return error_response
+
     return _get_location_response(location_name)
 
 
