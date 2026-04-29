@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from googleapiclient.discovery import build
 
-import config
+import settings
 import google_credentials
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -25,7 +25,7 @@ def _fetch_values(sheet_name: str) -> list[list[str]]:
     service = _get_service()
     sheet = service.spreadsheets()
     result = sheet.values().get(
-        spreadsheetId=config.SHEET_ID,
+        spreadsheetId=settings.SHEET_ID,
         range=sheet_name,
     ).execute()
     return result.get("values", [])
@@ -36,7 +36,7 @@ def _pad_row(row: list[str], width: int) -> list[str]:
 
 
 def fetch_basic_info_rows() -> list[dict]:
-    values = _fetch_values(config.BASIC_INFO_SHEET_NAME)
+    values = _fetch_values(settings.BASIC_INFO_SHEET_NAME)
     if len(values) < 3:
         return []
 
@@ -53,7 +53,7 @@ def fetch_basic_info_rows() -> list[dict]:
 
 
 def fetch_field_record_rows() -> list[dict]:
-    values = _fetch_values(config.FIELD_RECORDS_SHEET_NAME)
+    values = _fetch_values(settings.FIELD_RECORDS_SHEET_NAME)
     if len(values) < 2:
         return []
 
