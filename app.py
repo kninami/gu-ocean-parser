@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from flask import Flask, jsonify, request
+import json
+import os
+
+from flask import Flask, request
 
 import data_service
 import google_credentials
@@ -8,9 +11,69 @@ import google_credentials
 app = Flask(__name__)
 
 
+def run_dev_server() -> None:
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "5000"))
+    debug = os.getenv("FLASK_DEBUG", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
+    app.run(host=host, port=port, debug=debug)
+
+
+def _json_response(payload: dict, status: int = 200):
+    return app.response_class(
+        response=json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        status=status,
+        mimetype="application/json",
+    )
+
+
 def _wants_refresh() -> bool:
     value = (request.args.get("refresh") or "").strip().lower()
     return value in {"1", "true", "yes", "y"}
+
+
+def _get_location_response(location_name: str):
+    dataset = data_service.get_dataset(force_refresh=_wants_refresh())
+    location = dataset.get("locations", {}).get(location_name)
+
+    if location is None:
+        return _json_response(
+            {
+                "message": "Location not found.",
+                "location": location_name,
+            },
+            status=404,
+        )
+
+    month = request.args.get("month")
+    if not month:
+        return _json_response(location)
+
+    monthly_report = location.get("reports_by_month", {}).get(month)
+    if monthly_report is None:
+        return _json_response(
+            {
+                "message": "Month not found for location.",
+                "location": location_name,
+                "month": month,
+                "available_months": location.get("available_months", []),
+            },
+            status=404,
+        )
+
+    return _json_response(
+        {
+            "location": location_name,
+            "basic_info": location.get("basic_info", {}),
+            "month": month,
+            "records": monthly_report.get("records", []),
+            "available_months": location.get("available_months", []),
+        }
+    )
 
 
 @app.before_request
@@ -27,12 +90,14 @@ def _clear_vercel_oidc_token(exc) -> None:
 
 @app.get("/")
 def index():
-    return jsonify(
+    return _json_response(
         {
             "service": "greenpeace-sea-api",
             "endpoints": [
                 "/health",
                 "/locations",
+                "/location?name=신안",
+                "/location?name=신안&month=YYYY-MM",
                 "/locations/<location_name>",
                 "/locations/<location_name>?month=YYYY-MM",
             ],
@@ -42,7 +107,7 @@ def index():
 
 @app.get("/health")
 def health():
-    return jsonify(
+    return _json_response(
         {
             "status": "ok",
             **data_service.get_cache_status(),
@@ -67,7 +132,7 @@ def list_locations():
             }
         )
 
-    return jsonify(
+    return _json_response(
         {
             "last_updated": dataset.get("last_updated"),
             "locations": items,
@@ -75,46 +140,24 @@ def list_locations():
     )
 
 
+@app.get("/location")
+def get_location_by_query():
+    location_name = (request.args.get("name") or "").strip()
+    if not location_name:
+        return _json_response(
+            {
+                "message": "Missing required query parameter: name",
+            },
+            status=400,
+        )
+
+    return _get_location_response(location_name)
+
+
 @app.get("/locations/<path:location_name>")
 def get_location(location_name: str):
-    dataset = data_service.get_dataset(force_refresh=_wants_refresh())
-    location = dataset.get("locations", {}).get(location_name)
+    return _get_location_response(location_name)
 
-    if location is None:
-        return (
-            jsonify(
-                {
-                    "message": "Location not found.",
-                    "location": location_name,
-                }
-            ),
-            404,
-        )
 
-    month = request.args.get("month")
-    if not month:
-        return jsonify(location)
-
-    monthly_report = location.get("reports_by_month", {}).get(month)
-    if monthly_report is None:
-        return (
-            jsonify(
-                {
-                    "message": "Month not found for location.",
-                    "location": location_name,
-                    "month": month,
-                    "available_months": location.get("available_months", []),
-                }
-            ),
-            404,
-        )
-
-    return jsonify(
-        {
-            "location": location_name,
-            "basic_info": location.get("basic_info", {}),
-            "month": month,
-            "records": monthly_report.get("records", []),
-            "available_months": location.get("available_months", []),
-        }
-    )
+if __name__ == "__main__":
+    run_dev_server()
