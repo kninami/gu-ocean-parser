@@ -14,6 +14,3 @@ FIELD_RECORDS_SHEET_NAME = os.getenv("FIELD_RECORDS_SHEET_NAME", "현장 조사 
 
 # 캐시
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
-
-# 로컬 fallback용 서비스 계정 파일 경로
-SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE", "credentials.json")

@@ -8,7 +8,7 @@ import unicodedata
 from flask import Flask, request
 
 import data_service
-import google_credentials
+import sheets_parser
 
 app = Flask(__name__)
 
@@ -139,17 +139,14 @@ def _get_location_response(location_name: str):
         }
     )
 
-
-@app.before_request
-def _bind_vercel_oidc_token() -> None:
-    google_credentials.set_request_oidc_token(
-        request.headers.get("x-vercel-oidc-token")
+@app.errorhandler(sheets_parser.SheetFetchError)
+def handle_sheet_fetch_error(exc: sheets_parser.SheetFetchError):
+    return _json_response(
+        {
+            "message": str(exc),
+        },
+        status=502,
     )
-
-
-@app.teardown_request
-def _clear_vercel_oidc_token(exc) -> None:
-    google_credentials.set_request_oidc_token(None)
 
 
 @app.get("/")
