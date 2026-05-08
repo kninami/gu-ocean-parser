@@ -14,6 +14,27 @@ GVIZ_ENDPOINT_TEMPLATE = "https://docs.google.com/spreadsheets/d/{sheet_id}/gviz
 GVIZ_RESPONSE_MARKER = "google.visualization.Query.setResponse("
 GVIZ_DATE_PATTERN = re.compile(r"(?:new\s+)?Date\(([^)]*)\)")
 PUBLIC_SHEET_TIMEOUT_SECONDS = 20
+FIELD_RECORD_HEADER_FALLBACKS = {
+    0: "조사지",
+    1: "조사일시",
+    2: "조사자",
+    3: "날씨",
+    4: "기온",
+    5: "풍속",
+    6: "조사 범위",
+    7: "조사 방식",
+    8: "촬영",
+    9: "보호구역 상태",
+    10: "특기사항",
+    11: "생물 다양성 상태",
+    12: "위협 요인",
+    13: "훼손 오염 상태",
+    14: "사진 영상 자료 1",
+    15: "사진 영상 자료 2",
+    16: "사진 영상 자료 3",
+    17: "사진 영상 자료 4",
+    18: "사진 영상 자료 5",
+}
 
 
 @dataclass(frozen=True)
@@ -148,6 +169,16 @@ def _pad_row(row: list[str], width: int) -> list[str]:
     return row + [""] * max(0, width - len(row))
 
 
+def _normalize_field_record_headers(headers: list[str]) -> list[str]:
+    normalized = list(headers)
+    for index, fallback in FIELD_RECORD_HEADER_FALLBACKS.items():
+        if index >= len(normalized):
+            normalized.extend([""] * (index + 1 - len(normalized)))
+        if not normalized[index].strip():
+            normalized[index] = fallback
+    return normalized
+
+
 def fetch_basic_info_rows() -> list[dict]:
     values = _fetch_values(settings.BASIC_INFO_SHEET_NAME)
     if len(values) < 3:
@@ -170,7 +201,7 @@ def fetch_field_record_rows() -> list[dict]:
     if len(values) < 2:
         return []
 
-    headers = values[0]
+    headers = _normalize_field_record_headers(values[0])
     rows: list[dict] = []
 
     for raw_row in values[1:]:

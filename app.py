@@ -178,6 +178,13 @@ def health():
 
 @app.get("/locations")
 def list_locations():
+    requested_location_name = request.args.get("name")
+    if requested_location_name is not None:
+        location_name, error_response = _validate_location_name(requested_location_name)
+        if error_response is not None:
+            return error_response
+        return _get_location_response(location_name)
+
     dataset = data_service.get_dataset(force_refresh=_wants_refresh())
     locations = dataset.get("locations", {})
     items = []
