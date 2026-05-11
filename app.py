@@ -9,6 +9,7 @@ from flask import Flask, request
 
 import data_service
 import sheets_parser
+import settings
 
 app = Flask(__name__)
 
@@ -35,6 +36,10 @@ def _json_response(payload: dict, status: int = 200):
         status=status,
         mimetype="application/json",
     )
+
+
+def _build_preflight_response():
+    return app.response_class(status=204)
 
 
 def _wants_refresh() -> bool:
@@ -138,6 +143,24 @@ def _get_location_response(location_name: str):
             "available_months": location.get("available_months", []),
         }
     )
+
+
+@app.before_request
+def handle_cors_preflight():
+    if request.method == "OPTIONS":
+        return _build_preflight_response()
+
+
+@app.after_request
+def add_cors_headers(response):
+    allow_origin = settings.CORS_ALLOW_ORIGIN or "*"
+    response.headers["Access-Control-Allow-Origin"] = allow_origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Max-Age"] = "3600"
+    if allow_origin != "*":
+        response.headers["Vary"] = "Origin"
+    return response
 
 @app.errorhandler(sheets_parser.SheetFetchError)
 def handle_sheet_fetch_error(exc: sheets_parser.SheetFetchError):
