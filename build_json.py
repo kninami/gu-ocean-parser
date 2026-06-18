@@ -27,6 +27,7 @@ DEFAULT_HEADER_KEY_MAP = {
     "관광 및 레저활동": "tourism_and_leisure_activities",
     "시설 및 인프라": "facilities_and_infrastructure",
     "특기사항": "notes",
+    "오각형 이미지": "pentagon_image_url",
     "조사일시": "survey_datetime",
     "조사자": "surveyor",
     "날씨": "weather",
